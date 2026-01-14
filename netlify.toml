@@ -1,2 +1,15 @@
+# netlify.toml
+
+[build]
+  command = "pnpm run build"
+  publish = "dist"
+
 [build.environment]
-PNPM_FLAGS = "--no-frozen-lockfile"
+  PNPM_FLAGS = "--no-frozen-lockfile"
+  NODE_VERSION = "20"
+
+# Redirect rules for SPA routing
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
