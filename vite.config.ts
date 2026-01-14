@@ -29,9 +29,9 @@ export default defineConfig({
         'icon-btn': 'op30 hover:op100',
       },
       presets: [
-        presetUno(),
-        presetAttributify(),
-        presetIcons(),
+        presetUno() as any,
+        presetAttributify() as any,
+        presetIcons() as any,
       ],
     }),
   ],
