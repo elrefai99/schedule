@@ -1,13 +1,19 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
+import piniaPluginPersistedstate from 'pinia-plugin-persistedstate'
 import '@unocss/reset/tailwind.css'
 import 'uno.css'
-import App from './App.vue'
-import vue3GoogleLogin from 'vue3-google-login'
+import AuthWrapper from './AuthWrapper.vue'
+import { useAuthStore } from './stores/auth'
 
-const app = createApp(App)
-app.use(createPinia())
-app.use(vue3GoogleLogin, {
-     clientId: "486721954476-uiqegg4ubonatrjs3ul3savavkdaa0fl.apps.googleusercontent.com",
-})
+const pinia = createPinia()
+pinia.use(piniaPluginPersistedstate)
+
+const app = createApp(AuthWrapper)
+app.use(pinia)
+
+// Initialize Firebase auth
+const authStore = useAuthStore()
+authStore.initAuth()
+
 app.mount('#app')

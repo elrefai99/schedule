@@ -1,5 +1,5 @@
 <script lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useScheduleStore } from './stores/store';
 
 export default {
@@ -7,6 +7,13 @@ export default {
   
   setup() {
     const store = useScheduleStore()
+    
+    // Load user tasks from Firebase on mount
+    onMounted(async () => {
+      if (!store.synced) {
+        await store.loadUserTasks()
+      }
+    })
     
     const currentDate: any = ref(new Date())
     const selectedDate: any = ref<Date | null>(null)
@@ -18,8 +25,36 @@ export default {
       completed: false
     })
     
+    // Timer state
+    const currentTime = ref(new Date())
+    const timerMinutes = ref(50)
+    const timerSeconds = ref(0)
+    const isTimerRunning = ref(false)
+    const isBreakTime = ref(false)
+    const timerInterval: any = ref(null)
+    
     const today = new Date()
     today.setHours(0, 0, 0, 0)
+    
+    // Update current time every second and check tasks
+    setInterval(() => {
+      currentTime.value = new Date()
+      checkAndCompletePassedTasks()
+    }, 1000)
+    
+    const currentTimeFormatted = computed(() => {
+      const hours = String(currentTime.value.getHours()).padStart(2, '0')
+      const minutes = String(currentTime.value.getMinutes()).padStart(2, '0')
+      const seconds = String(currentTime.value.getSeconds()).padStart(2, '0')
+      return `${hours}:${minutes}:${seconds}`
+    })
+    
+    // Get current time in HH:MM format for comparison
+    const getCurrentTimeString = () => {
+      const hours = String(currentTime.value.getHours()).padStart(2, '0')
+      const minutes = String(currentTime.value.getMinutes()).padStart(2, '0')
+      return `${hours}:${minutes}`
+    }
     
     const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
     const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
@@ -65,6 +100,82 @@ export default {
       const dateKey = formatDate(selectedDate.value)
       return store.getTasksForDate(dateKey).sort((a, b) => a.time.localeCompare(b.time))
     })
+    
+    // Get next upcoming task for today
+    const nextTask = computed(() => {
+      const dateKey = todayFormatted.value
+      const tasks = store.getTasksForDate(dateKey)
+        .filter(task => !task.completed)
+        .sort((a, b) => a.time.localeCompare(b.time))
+      
+      const currentTimeStr = getCurrentTimeString()
+      return tasks.find(task => task.time > currentTimeStr) || null
+    })
+    
+    // Get current active task (task whose time has started but not yet completed)
+    const currentActiveTask = computed(() => {
+      const dateKey = todayFormatted.value
+      const tasks = store.getTasksForDate(dateKey)
+        .filter(task => !task.completed)
+        .sort((a, b) => a.time.localeCompare(b.time))
+      
+      const currentTimeStr = getCurrentTimeString()
+      
+      // Find the last task that has started (time <= current time)
+      let activeTask = null
+      for (const task of tasks) {
+        if (task.time <= currentTimeStr) {
+          activeTask = task
+        } else {
+          break
+        }
+      }
+      return activeTask
+    })
+    
+    // Auto-complete tasks when their time has passed
+    const checkAndCompletePassedTasks = () => {
+      const dateKey = todayFormatted.value
+      const tasks = store.getTasksForDate(dateKey)
+      const currentTimeStr = getCurrentTimeString()
+      
+      tasks.forEach(task => {
+        if (!task.completed && task.time < currentTimeStr) {
+          // Check if this task's time has passed
+          const taskIndex = tasks.findIndex(t => t.id === task.id)
+          const nextTaskInList = tasks[taskIndex + 1]
+          
+          // Auto-complete if:
+          // 1. There's a next task and current time >= next task time, OR
+          // 2. There's no next task and current time is at least 1 hour past this task
+          if (nextTaskInList) {
+            if (currentTimeStr >= nextTaskInList.time) {
+              store.toggleTaskComplete(dateKey, task.id)
+            }
+          } else {
+            // For the last task, auto-complete after 1 hour
+            const [taskHour, taskMin] = task.time.split(':').map(Number)
+            const [currentHour, currentMin] = currentTimeStr.split(':').map(Number)
+            const taskMinutes = taskHour * 60 + taskMin
+            const currentMinutes = currentHour * 60 + currentMin
+            
+            if (currentMinutes >= taskMinutes + 60) {
+              store.toggleTaskComplete(dateKey, task.id)
+            }
+          }
+        }
+      })
+    }
+    
+    // Check if a task is the current active one
+    const isCurrentTask = (taskId: string) => {
+      return currentActiveTask.value?.id === taskId
+    }
+    
+    // Check if a task is the next upcoming one
+    const isNextTask = (taskId: string) => {
+      return nextTask.value?.id === taskId
+    }
     
     const hasTasksOnDate = (date: Date) => {
       const dateKey = formatDate(date)
@@ -128,6 +239,82 @@ export default {
       store.deleteTask(dateKey, taskId)
     }
     
+    // Timer functions
+    const startTimer = () => {
+      if (isTimerRunning.value) return
+      
+      isTimerRunning.value = true
+      timerInterval.value = setInterval(() => {
+        if (timerSeconds.value === 0) {
+          if (timerMinutes.value === 0) {
+            // Timer reached 0
+            stopTimer()
+            showNotification()
+            return
+          }
+          timerMinutes.value--
+          timerSeconds.value = 59
+        } else {
+          timerSeconds.value--
+        }
+      }, 1000)
+    }
+    
+    const pauseTimer = () => {
+      isTimerRunning.value = false
+      if (timerInterval.value) {
+        clearInterval(timerInterval.value)
+        timerInterval.value = null
+      }
+    }
+    
+    const resetTimer = () => {
+      pauseTimer()
+      if (isBreakTime.value) {
+        timerMinutes.value = 10
+      } else {
+        timerMinutes.value = 50
+      }
+      timerSeconds.value = 0
+    }
+    
+    const stopTimer = () => {
+      pauseTimer()
+      isBreakTime.value = !isBreakTime.value
+      if (isBreakTime.value) {
+        timerMinutes.value = 10
+      } else {
+        timerMinutes.value = 50
+      }
+      timerSeconds.value = 0
+    }
+    
+    const showNotification = () => {
+      const message = isBreakTime.value 
+        ? '🎉 Break time is over! Ready to get back to work?' 
+        : '⏰ Time for a break! You\'ve completed 50 minutes of focused work.'
+      
+      if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification('Schedule Manager', { body: message })
+      } else if ('Notification' in window && Notification.permission !== 'denied') {
+        Notification.requestPermission().then(permission => {
+          if (permission === 'granted') {
+            new Notification('Schedule Manager', { body: message })
+          }
+        })
+      }
+      
+      alert(message)
+    }
+    
+    const timerDisplay = computed(() => {
+      const mins = String(timerMinutes.value).padStart(2, '0')
+      const secs = String(timerSeconds.value).padStart(2, '0')
+      return `${mins}:${secs}`
+    })
+
+    
+    
     return {
       currentDate,
       selectedDate,
@@ -147,7 +334,24 @@ export default {
       handleDateClick,
       handleAddTask,
       toggleComplete,
-      deleteTaskItem
+      deleteTaskItem,
+      // Timer
+      currentTime,
+      currentTimeFormatted,
+      timerMinutes,
+      timerSeconds,
+      isTimerRunning,
+      isBreakTime,
+      timerDisplay,
+      startTimer,
+      pauseTimer,
+      resetTimer,
+      stopTimer,
+      // Task tracking
+      nextTask,
+      currentActiveTask,
+      isCurrentTask,
+      isNextTask
     }
   }
 }
@@ -159,26 +363,92 @@ export default {
     <div max-w-6xl mx-auto>
       <div bg-white dark:bg-gray-800 rounded-3xl shadow-2xl overflow-hidden transition-colors duration-300 class="dark:shadow-gray-900/50">
         <!-- Header -->
-        <div class="bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-700 dark:to-indigo-800 p-6 text-white transition-colors duration-300">
-          <div class="flex justify-between items-center flex-wrap gap-4">
-            <div class="flex items-center gap-3">
+        <div bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-700 dark:to-indigo-800 p-6 text-white transition-colors duration-300>
+          <div flex justify-between items-center flex-wrap gap-4>
+            <div flex items-center gap-3>
               <svg class="w-8 h-8 stroke-2" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                 <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
                 <line x1="16" y1="2" x2="16" y2="6"/>
                 <line x1="8" y1="2" x2="8" y2="6"/>
                 <line x1="3" y1="10" x2="21" y2="10"/>
               </svg>
-              <h1 class="text-3xl font-bold">Schedule Manager</h1>
+              <h1 text-3xl font-bold>Schedule Manager</h1>
             </div>
-            <div class="text-sm opacity-90">Today: {{ todayFormatted }}</div>
+            <div flex flex-col items-end gap-2>
+              <div text-sm opacity-90>Today: {{ todayFormatted }}</div>
+              <div text-lg font-semibold>{{ currentTimeFormatted }}</div>
+            </div>
+          </div>
+          
+          <!-- Pomodoro Timer -->
+          <div class="bg-white/10" mt-6  backdrop-blur-sm rounded-2xl p-4>
+            <div flex items-center justify-between flex-wrap gap-4>
+              <div flex items-center gap-3>
+                <svg class="w-6 h-6 stroke-2" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <circle cx="12" cy="12" r="10"/>
+                  <polyline points="12 6 12 12 16 14"/>
+                </svg>
+                <div>
+                  <div text-xs opacity-75>{{ isBreakTime ? 'Break Time' : 'Focus Time' }}</div>
+                  <div text-3xl font-bold font-mono>{{ timerDisplay }}</div>
+                </div>
+              </div>
+              <div flex gap-2>
+                <button 
+                  v-if="!isTimerRunning"
+                  @click="startTimer"
+                  class="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 rounded-lg font-medium transition-colors flex items-center gap-2"
+                >
+                  <svg class="w-5 h-5 stroke-2" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <polygon points="5 3 19 12 5 21 5 3"/>
+                  </svg>
+                  Start
+                </button>
+                <button 
+                  v-if="isTimerRunning"
+                  @click="pauseTimer"
+                  class="px-4 py-2 bg-amber-500 hover:bg-amber-600 rounded-lg font-medium transition-colors flex items-center gap-2"
+                >
+                  <svg class="w-5 h-5 stroke-2" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <rect x="6" y="4" width="4" height="16"/>
+                    <rect x="14" y="4" width="4" height="16"/>
+                  </svg>
+                  Pause
+                </button>
+                <button 
+                  @click="resetTimer"
+                  class="px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg font-medium transition-colors flex items-center gap-2"
+                >
+                  <svg class="w-5 h-5 stroke-2" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <polyline points="1 4 1 10 7 10"/>
+                    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+                  </svg>
+                  Reset
+                </button>
+              </div>
+            </div>
+            
+            <!-- Next Task Preview -->
+            <div v-if="currentActiveTask || nextTask" class="mt-3 pt-3 border-t border-white/20">
+              <div v-if="currentActiveTask" class="flex items-center gap-2 text-sm mb-2">
+                <span class="px-2 py-1 bg-emerald-500/80 rounded text-white font-semibold text-xs">ACTIVE</span>
+                <span class="opacity-90">{{ currentActiveTask.time }}</span>
+                <span class="font-medium">{{ currentActiveTask.title }}</span>
+              </div>
+              <div v-if="nextTask" class="flex items-center gap-2 text-sm">
+                <span class="px-2 py-1 bg-blue-500/80 rounded text-white font-semibold text-xs">NEXT</span>
+                <span class="opacity-90">{{ nextTask.time }}</span>
+                <span class="font-medium">{{ nextTask.title }}</span>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 p-6">
+        <div grid grid-cols-1 md:grid-cols-2 gap-6 p-6>
           <!-- Calendar View -->
-          <div class="min-h-100">
-            <div class="bg-gray-50 dark:bg-gray-700 rounded-2xl p-4 transition-colors duration-300">
-              <div class="flex justify-between items-center mb-4">
+          <div min-h-100>
+            <div bg-gray-50 dark:bg-gray-700 rounded-2xl p-4 transition-colors duration-300>
+              <div flex justify-between items-center mb-4>
                 <button @click="changeMonth(-1)" class="bg-transparent border-none p-2 cursor-pointer rounded-lg transition-colors hover:bg-gray-200 dark:hover:bg-gray-600">
                   <svg class="w-5 h-5 stroke-2 text-gray-800 dark:text-gray-200" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                     <polyline points="15 18 9 12 15 6"/>
@@ -192,11 +462,11 @@ export default {
                 </button>
               </div>
 
-              <div class="grid grid-cols-7 gap-2 mb-2">
-                <div v-for="day in weekDays" :key="day" class="text-center text-sm font-semibold text-gray-500 dark:text-gray-400 p-2">{{ day }}</div>
+              <div grid grid-cols-7 gap-2 mb-2>
+                <div v-for="day in weekDays" :key="day" text-center text-sm font-semibold text-gray-500 dark:text-gray-400 p-2>{{ day }}</div>
               </div>
 
-              <div class="grid grid-cols-7 gap-2">
+              <div grid grid-cols-7 gap-2>
                 <button
                   v-for="(day, index) in calendarDays"
                   :key="index"
@@ -227,10 +497,10 @@ export default {
           </div>
 
           <!-- Day Detail View -->
-          <div class="min-h-100">
-            <div v-if="selectedDate" class="bg-gray-50 dark:bg-gray-700 rounded-2xl p-4 transition-colors duration-300">
-              <div class="flex justify-between items-center mb-4">
-                <h2 class="text-xl font-bold text-gray-800 dark:text-gray-100">{{ formatDate(selectedDate) }}</h2>
+          <div min-h-100>
+            <div v-if="selectedDate" bg-gray-50 dark:bg-gray-700 rounded-2xl p-4 transition-colors duration-300>
+              <div flex justify-between items-center mb-4>
+                <h2 text-xl font-bold text-gray-800 dark:text-gray-100>{{ formatDate(selectedDate) }}</h2>
                 <button
                   v-if="!isDateDisabled(selectedDate)"
                   @click="showAddForm = !showAddForm"
@@ -245,7 +515,7 @@ export default {
               </div>
 
               <!-- Add Task Form -->
-              <div v-if="showAddForm" class="bg-white dark:bg-gray-600 p-4 rounded-lg mb-4 shadow-sm transition-colors duration-300">
+              <div v-if="showAddForm" bg-white dark:bg-gray-600 p-4 rounded-lg mb-4 shadow-sm transition-colors duration-300>
                 <input
                   v-model="newTask.title"
                   type="text"
@@ -263,16 +533,16 @@ export default {
                   class="w-full p-3 border border-gray-300 dark:border-gray-500 dark:bg-gray-700 dark:text-gray-100 rounded-lg mb-3 font-sans text-sm resize-none focus:outline-none focus:border-blue-600 dark:focus:border-blue-400 focus:ring-3 focus:ring-blue-600/10 dark:focus:ring-blue-400/20 transition-colors placeholder:text-gray-400 dark:placeholder:text-gray-500"
                   rows="3"
                 ></textarea>
-                <div class="flex gap-2">
-                  <button @click="handleAddTask" class="flex-1 p-3 border-none rounded-lg cursor-pointer font-medium transition-all bg-emerald-500 dark:bg-emerald-600 text-white hover:bg-emerald-600 dark:hover:bg-emerald-700">Save</button>
-                  <button @click="showAddForm = false" class="flex-1 p-3 border-none rounded-lg cursor-pointer font-medium transition-all bg-gray-200 dark:bg-gray-500 text-gray-700 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-400">Cancel</button>
+                <div flex gap-2>
+                  <button @click="handleAddTask" flex-1 p-3 border-none rounded-lg cursor-pointer font-medium transition-all bg-emerald-500 dark:bg-emerald-600 text-white hover:bg-emerald-600 dark:hover:bg-emerald-700>Save</button>
+                  <button @click="showAddForm = false" flex-1 p-3 border-none rounded-lg cursor-pointer font-medium transition-all bg-gray-200 dark:bg-gray-500 text-gray-700 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-400>Cancel</button>
                 </div>
               </div>
 
               <!-- Tasks List -->
-              <div class="max-h-100 overflow-y-auto">
-                <div v-if="currentTasks.length === 0" class="text-center py-12 px-4 text-gray-500 dark:text-gray-400">
-                  <svg class="w-12 h-12 stroke-2 opacity-50 mb-2 mx-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <div max-h-100 overflow-y-auto>
+                <div v-if="currentTasks.length === 0" text-center py-12 px-4 text-gray-500 dark:text-gray-400>
+                  <svg w-12 h-12 stroke-2 opacity-50 mb-2 mx-auto viewBox="0 0 24 24" fill="none" stroke="currentColor">
                     <circle cx="12" cy="12" r="10"/>
                     <polyline points="12 6 12 12 16 14"/>
                   </svg>
@@ -284,7 +554,9 @@ export default {
                   :key="task.id"
                   :class="[
                     'bg-white dark:bg-gray-600 p-4 rounded-lg mb-3 shadow-sm flex justify-between items-start transition-colors duration-300',
-                    { 'opacity-60': task.completed }
+                    { 'opacity-60': task.completed },
+                    { 'ring-2 ring-emerald-500 dark:ring-emerald-400 bg-emerald-50 dark:bg-emerald-900/20': isCurrentTask(task.id) && formatDate(selectedDate) === todayFormatted },
+                    { 'ring-2 ring-blue-500 dark:ring-blue-400 bg-blue-50 dark:bg-blue-900/20': isNextTask(task.id) && formatDate(selectedDate) === todayFormatted }
                   ]"
                 >
                   <div class="flex gap-3 flex-1">
@@ -304,12 +576,32 @@ export default {
                       </svg>
                     </button>
                     <div class="flex-1">
-                      <div class="flex items-center gap-1 text-gray-500 dark:text-gray-400 text-sm font-semibold mb-1">
-                        <svg class="w-4 h-4 stroke-2" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                          <circle cx="12" cy="12" r="10"/>
-                          <polyline points="12 6 12 12 16 14"/>
-                        </svg>
-                        <span>{{ task.time }}</span>
+                      <div class="flex items-center gap-2 flex-wrap mb-1">
+                        <div class="flex items-center gap-1 text-gray-500 dark:text-gray-400 text-sm font-semibold">
+                          <svg class="w-4 h-4 stroke-2" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <circle cx="12" cy="12" r="10"/>
+                            <polyline points="12 6 12 12 16 14"/>
+                          </svg>
+                          <span>{{ task.time }}</span>
+                        </div>
+                        <span 
+                          v-if="isCurrentTask(task.id) && formatDate(selectedDate) === todayFormatted"
+                          class="px-2 py-0.5 bg-emerald-500 dark:bg-emerald-600 text-white text-xs font-bold rounded-full flex items-center gap-1"
+                        >
+                          <svg class="w-3 h-3 stroke-2" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <polygon points="5 3 19 12 5 21 5 3"/>
+                          </svg>
+                          ACTIVE NOW
+                        </span>
+                        <span 
+                          v-if="isNextTask(task.id) && formatDate(selectedDate) === todayFormatted"
+                          class="px-2 py-0.5 bg-blue-500 dark:bg-blue-600 text-white text-xs font-bold rounded-full flex items-center gap-1"
+                        >
+                          <svg class="w-3 h-3 stroke-2" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <polyline points="9 18 15 12 9 6"/>
+                          </svg>
+                          UP NEXT
+                        </span>
                       </div>
                       <h3 :class="['text-base font-semibold text-gray-800 dark:text-gray-100 mb-1', { 'line-through': task.completed }]">{{ task.title }}</h3>
                       <p v-if="task.description" class="text-sm text-gray-500 dark:text-gray-400 mt-1">{{ task.description }}</p>

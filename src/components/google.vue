@@ -25,8 +25,6 @@ const handleGoogleLogin = async (response: any) => {
       'Content-Type': 'application/json'
     }
   })
-console.log(data);
-
   userStore.setUser(data.user)
 }
 </script>
