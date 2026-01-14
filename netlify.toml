@@ -1,9 +1,16 @@
 [build]
-  command = "npm run build"
+  command = "pnpm run build"
   publish = "dist"
-  functions = "netlify/functions"
 
-[[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/api/:splat"
-  status = 200
+[build.environment]
+  PNPM_FLAGS = "--no-frozen-lockfile"
+  NODE_VERSION = "20"
+
+[context.production.environment]
+  VITE_API_URL = "https://api.example.com"
+
+[context.deploy-preview.environment]
+  VITE_API_URL = "https://staging-api.example.com"
+
+[context.branch-deploy.environment]
+  VITE_API_URL = "https://dev-api.example.com"
