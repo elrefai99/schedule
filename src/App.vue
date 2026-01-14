@@ -208,10 +208,9 @@ export default {
     }
     
     const handleDateClick = (date: Date) => {
-      if (!isDateDisabled(date)) {
-        selectedDate.value = date
-        showAddForm.value = false
-      }
+      // Allow selecting past dates for view-only mode
+      selectedDate.value = date
+      showAddForm.value = false
     }
     
     const handleAddTask = () => {
@@ -230,11 +229,15 @@ export default {
     }
     
     const toggleComplete = (taskId: string) => {
+      // Read-only for past dates
+      if (!selectedDate.value || isDateDisabled(selectedDate.value)) return
       const dateKey = formatDate(selectedDate.value)
       store.toggleTaskComplete(dateKey, taskId)
     }
     
     const deleteTaskItem = (taskId: string) => {
+      // Read-only for past dates
+      if (!selectedDate.value || isDateDisabled(selectedDate.value)) return
       const dateKey = formatDate(selectedDate.value)
       store.deleteTask(dateKey, taskId)
     }
@@ -471,12 +474,12 @@ export default {
                   v-for="(day, index) in calendarDays"
                   :key="index"
                   @click="day && handleDateClick(day)"
-                  :disabled="!day || isDateDisabled(day)"
+                  :disabled="!day"
                   :class="[
                     'aspect-square p-2 rounded-lg text-sm font-medium border-none cursor-pointer bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-200 transition-all relative flex flex-col items-center justify-center',
                     {
                       'hover:bg-gray-200 dark:hover:bg-gray-500': day && !isDateDisabled(day),
-                      'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 cursor-not-allowed': day && isDateDisabled(day),
+                      'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500': day && isDateDisabled(day),
                       'bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 font-semibold': day && formatDate(day) === todayFormatted && !(selectedDate && formatDate(day) === formatDate(selectedDate)),
                       'bg-blue-600 dark:bg-blue-500 text-white shadow-lg shadow-blue-600/40 dark:shadow-blue-500/40': selectedDate && day && formatDate(day) === formatDate(selectedDate),
                       'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200': day && hasTasksOnDate(day) && !(selectedDate && formatDate(day) === formatDate(selectedDate))
@@ -504,7 +507,7 @@ export default {
                 <button
                   v-if="!isDateDisabled(selectedDate)"
                   @click="showAddForm = !showAddForm"
-                  class="flex items-center gap-2 px-4 py-2 bg-blue-600 dark:bg-blue-500 text-white border-none rounded-lg cursor-pointer font-medium transition-colors hover:bg-blue-700 dark:hover:bg-blue-600"
+                  flex items-center gap-2 px-4 py-2 bg-blue-600 dark:bg-blue-500 text-white border-none rounded-lg cursor-pointer font-medium transition-colors hover:bg-blue-700 dark:hover:bg-blue-600
                 >
                   <svg class="w-5 h-5 stroke-2" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                     <line x1="12" y1="5" x2="12" y2="19"/>
