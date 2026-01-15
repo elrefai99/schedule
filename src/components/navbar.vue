@@ -36,7 +36,7 @@ const handleLogout = async () => {
           <div v-if="authStore.isAuthenticated && authStore.user" class="flex items-center gap-3">
             <img
               :src="authStore.user.photoURL || '/default-avatar.png'"
-              class="w-9 h-9 rounded-full border-2 border-blue-500 dark:border-blue-400"
+              class="w-9 h-9 rounded-full"
               :alt="authStore.user.displayName || 'User'"
             />
             <div class="hidden sm:block">
