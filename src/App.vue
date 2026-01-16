@@ -16,7 +16,7 @@ export default {
     })
     
     const currentDate: any = ref(new Date())
-    const selectedDate: any = ref<Date | null>(null)
+    const selectedDate: any = ref<Date | number>(new Date())
     const calendarView = ref<'day' | 'week' | 'month'>('month')
     const showAddForm: any = ref(false)
     const newTask: any = ref({
