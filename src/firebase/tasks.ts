@@ -19,6 +19,7 @@ export interface Task {
      completed: boolean
      date: string
      userId: string
+     order?: number
      meetingType?: 'none' | 'google' | 'teams' | 'custom'
      meetingUrl?: string
      guestEmails?: string[]

@@ -25,11 +25,25 @@ export const useScheduleStore = defineStore('schedule', {
                     const tasks = await getAllUserTasks(authStore.user.uid)
 
                     this.schedules = {}
-                    tasks.forEach(task => {
+                    tasks.forEach((task: any) => {
                          if (!this.schedules[task.date]) {
                               this.schedules[task.date] = []
                          }
+                         // Ensure order field exists, default to array index if not
+                         if (task.order === undefined) {
+                              task.order = this.schedules[task.date].length
+                         }
                          this.schedules[task.date].push(task)
+                    })
+
+                    // Sort tasks by order within each date
+                    Object.keys(this.schedules).forEach(dateKey => {
+                         this.schedules[dateKey].sort((a, b) => {
+                              if (a.order !== undefined && b.order !== undefined) {
+                                   return a.order - b.order
+                              }
+                              return a.time.localeCompare(b.time)
+                         })
                     })
 
                     this.synced = true
@@ -58,7 +72,8 @@ export const useScheduleStore = defineStore('schedule', {
                const newTask = {
                     id: Date.now().toString(),
                     ...task,
-                    date: dateKey
+                    date: dateKey,
+                    order: (this.schedules[dateKey]?.length || 0)
                }
 
                if (!this.schedules[dateKey]) {
@@ -73,6 +88,28 @@ export const useScheduleStore = defineStore('schedule', {
                          await saveTask(authStore.user.uid, dateKey, taskToSave)
                     } catch (error) {
                          console.error('Error saving task to Firebase:', error)
+                    }
+               }
+          },
+
+          async updateTask(dateKey: string, task: any) {
+               const authStore = useAuthStore()
+
+               if (this.schedules[dateKey]) {
+                    const index = this.schedules[dateKey].findIndex(t => t.id === task.id)
+                    if (index !== -1) {
+                         // Merge updates
+                         const updatedTask = { ...this.schedules[dateKey][index], ...task }
+                         this.schedules[dateKey][index] = updatedTask
+
+                         if (authStore.user) {
+                              try {
+                                   const { date, userId, ...taskToSave } = updatedTask
+                                   await saveTask(authStore.user.uid, dateKey, taskToSave)
+                              } catch (error) {
+                                   console.error('Error updating task in Firebase:', error)
+                              }
+                         }
                     }
                }
           },
@@ -116,6 +153,39 @@ export const useScheduleStore = defineStore('schedule', {
                                    this.schedules[dateKey].push(taskToDelete)
                               }
                          }
+                    }
+               }
+          },
+
+          async reorderTasks(dateKey: string, taskIds: string[]) {
+               const authStore = useAuthStore()
+
+               if (!this.schedules[dateKey]) return
+
+               // Reorder tasks based on the new order
+               const tasksMap = new Map(this.schedules[dateKey].map(t => [t.id, t]))
+               const reorderedTasks = taskIds
+                    .map(id => tasksMap.get(id))
+                    .filter(Boolean) as any[]
+
+               // Update order field
+               reorderedTasks.forEach((task, index) => {
+                    task.order = index
+               })
+
+               this.schedules[dateKey] = reorderedTasks
+
+               // Save all reordered tasks to Firebase
+               if (authStore.user) {
+                    try {
+                         await Promise.all(
+                              reorderedTasks.map(task => {
+                                   const { date, userId, ...taskToSave } = task
+                                   return saveTask(authStore.user!.uid, dateKey, taskToSave)
+                              })
+                         )
+                    } catch (error) {
+                         console.error('Error reordering tasks in Firebase:', error)
                     }
                }
           }
