@@ -853,6 +853,11 @@ import { useDragDrop } from './shared/useDragDrop'
           </div>
         </div>
       </div>
+      <footer class="mt-6 text-center pb-6">
+        <p class="text-sm text-gray-500 dark:text-gray-400 font-medium">
+          &copy; {{ new Date().getFullYear() }} - <span class="font-semibold">created by</span> <a href="https://github.com/elrefai99" target="_blank" rel="noopener noreferrer" class="text-blue-600 dark:text-blue-400 hover:underline hover:text-blue-700 dark:hover:text-blue-300 transition-colors">elrefai99</a>
+        </p>
+      </footer>
     </div>
   </div>
 
