@@ -4,7 +4,7 @@ import { formatDate, getMinutesFromTime, getCurrentTimeString, isDateDisabled } 
 export function useTaskLogic(store: any, selectedDate: any, todayFormatted: any, currentTime: any) {
      const showAddForm = ref(false)
      const editingTaskId = ref<string | null>(null)
-     const showTodoList = ref(true)
+     const showTodoList = ref(false)
      const newTask = ref<any>({
           title: '',
           time: '09:00',
