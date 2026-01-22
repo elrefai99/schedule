@@ -4,6 +4,7 @@ import piniaPluginPersistedstate from 'pinia-plugin-persistedstate'
 import '@unocss/reset/tailwind.css'
 import 'uno.css'
 import AuthWrapper from './AuthWrapper.vue'
+import router from './router'
 import { useAuthStore } from './stores/auth'
 import { registerSW } from 'virtual:pwa-register'
 
@@ -12,6 +13,7 @@ pinia.use(piniaPluginPersistedstate)
 
 const app = createApp(AuthWrapper)
 app.use(pinia)
+app.use(router)
 
 // Initialize Firebase auth
 const authStore = useAuthStore()

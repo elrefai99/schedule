@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { useAuthStore } from './stores/auth'
 import Login from './components/Login.vue'
-import ScheduleApp from './App.vue'
+import Navbar from './components/navbar.vue'
 
 const authStore = useAuthStore()
 
@@ -26,7 +26,10 @@ const showApp = computed(() => authStore.isAuthenticated && !authStore.loading)
     <!-- Login Page -->
     <Login v-if="showLogin" />
 
-    <!-- Main App -->
-    <ScheduleApp v-if="showApp" />
+    <!-- Main App with Router -->
+    <div v-if="showApp">
+      <Navbar />
+      <router-view />
+    </div>
   </div>
 </template>
