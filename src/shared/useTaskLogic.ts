@@ -19,7 +19,6 @@ export function useTaskLogic(store: any, selectedDate: any, todayFormatted: any,
           useTimeRange: true      // ← new: toggle between time range and all-day
      })
 
-     const newTask = ref<any>(defaultNewTask())
 
      // Computed end date preview when durationDays > 1
      const endDatePreview = computed(() => {
@@ -165,7 +164,7 @@ export function useTaskLogic(store: any, selectedDate: any, todayFormatted: any,
                store.addTask(dateKey, taskPayload)
           }
 
-          newTask.value = defaultNewTask()
+          // newTask.value = defaultNewTask()
           showAddForm.value = false
           editingTaskId.value = null
      }

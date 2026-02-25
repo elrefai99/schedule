@@ -1191,7 +1191,6 @@ import { useDragDrop } from './shared/useDragDrop'
       </div>
     </div>
   </div>
-</template>
 
   <!-- Calendar Mini Popup (for day/week view navigation) -->
   <div v-if="showCalendarPopup" class="fixed inset-0 bg-black/40 flex items-start justify-center z-40 pt-16 sm:pt-20" @click.self="showCalendarPopup = false">
