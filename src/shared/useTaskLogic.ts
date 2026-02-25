@@ -6,10 +6,22 @@ export function useTaskLogic(store: any, selectedDate: any, todayFormatted: any,
      const showAddForm = ref(false)
      const editingTaskId = ref<string | null>(null)
      const showTodoList = ref(false)
+
+     const getNowHHMM = (): string => {
+          const now = new Date()
+          return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+     }
+
+     const getOneHourLaterHHMM = (): string => {
+          const now = new Date()
+          now.setHours(now.getHours() + 1)
+          return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+     }
+
      const newTask = ref<any>({
           title: '',
-          time: '09:00',
-          endTime: '10:00',
+          time: getNowHHMM(),
+          endTime: getOneHourLaterHHMM(),
           description: '',
           completed: false,
           meetingType: 'none',
