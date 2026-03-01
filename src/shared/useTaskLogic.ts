@@ -77,16 +77,25 @@ export function useTaskLogic(store: any, selectedDate: any, todayFormatted: any,
                     return
                }
 
-               const startMinutes = task.time ? getMinutesFromTime(task.time) : 0
-               const endMinutes = task.endTime ? getMinutesFromTime(task.endTime) : startMinutes + 60
+               // Use per-day time overrides if available (for multi-day tasks)
+               const { time: effectiveTime, endTime: effectiveEndTime } = store.getTaskTimeForDate(task, dateKey)
+               const startMinutes = effectiveTime ? getMinutesFromTime(effectiveTime) : 0
+               const endMinutes = effectiveEndTime ? getMinutesFromTime(effectiveEndTime) : startMinutes + 60
 
                if (task.completed) {
                     ended.push(task)
                } else if (isToday) {
-                    if (currentMinutes > endMinutes) {
+                    // Multi-day task on its start date: don't auto-end unless it's also the last day
+                    const isMultiDay = task.durationDays && task.durationDays > 1
+                    const isLastDay = !isMultiDay || (task.endDate && dateKey >= task.endDate)
+
+                    if (isLastDay && currentMinutes > endMinutes) {
                          ended.push(task)
                     } else if (currentMinutes >= startMinutes && currentMinutes <= endMinutes) {
                          workedOn.push(task)
+                    } else if (currentMinutes > endMinutes && isMultiDay && !isLastDay) {
+                         // Multi-day task, today's time slot passed but task continues on future days
+                         willStart.push(task)
                     } else {
                          willStart.push(task)
                     }
@@ -133,8 +142,18 @@ export function useTaskLogic(store: any, selectedDate: any, todayFormatted: any,
 
           tasks.forEach((task: any) => {
                if (!task.completed && task.time) {
-                    const startMinutes = getMinutesFromTime(task.time)
-                    const endMinutes = task.endTime ? getMinutesFromTime(task.endTime) : startMinutes + 60
+                    // Multi-day tasks: only auto-complete on the LAST day
+                    if (task.durationDays && task.durationDays > 1 && task.endDate) {
+                         if (dateKey < task.endDate) {
+                              // Not the last day yet — don't auto-complete
+                              return
+                         }
+                    }
+
+                    // Use per-day time override if available (for multi-day tasks)
+                    const { time: effectiveTime, endTime: effectiveEndTime } = store.getTaskTimeForDate(task, dateKey)
+                    const startMinutes = getMinutesFromTime(effectiveTime)
+                    const endMinutes = effectiveEndTime ? getMinutesFromTime(effectiveEndTime) : startMinutes + 60
                     if (currentMinutes > endMinutes) {
                          store.toggleTaskComplete(dateKey, task.id)
                     }
